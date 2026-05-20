@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador: LED Ghosting & Snubber</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Simulador Dinámico de Ghosting LED</h1>
+            <p>Visualiza cómo el divisor de corriente (Dimmer sin neutro + Snubber) afecta el estado de reposo de la cinta LED de 110V.</p>
+        </header>
+        
+        <main>
+            <!-- Panel de Controles -->
+            <aside class="controls">
+                <h2>Parámetros del Sistema</h2>
+                
+                <div class="control-group">
+                    <label for="leakage">Corriente de Fuga del Dimmer (mA): <span id="leakage-val" class="badge">2.0</span></label>
+                    <input type="range" id="leakage" min="0.1" max="5.0" step="0.1" value="2.0">
+                    <small>Fuga necesaria para alimentar el radio RF del atenuador.</small>
+                </div>
+
+                <div class="control-group">
+                    <label for="threshold">Umbral de Encendido LED (mA): <span id="threshold-val" class="badge">1.5</span></label>
+                    <input type="range" id="threshold" min="0.1" max="5.0" step="0.1" value="1.5">
+                    <small>Corriente mínima para vencer el V_f de los diodos.</small>
+                </div>
+
+                <div class="separator"></div>
+
+                <div class="control-group toggle-group">
+                    <label for="snubber-toggle">Snubber (Bypass) Instalado:</label>
+                    <label class="switch">
+                        <input type="checkbox" id="snubber-toggle" checked>
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+
+                <div class="control-group" id="snubber-res-group">
+                    <label for="snubber-res">Impedancia del Snubber (kΩ): <span id="snubber-res-val" class="badge">10</span></label>
+                    <input type="range" id="snubber-res" min="1" max="50" step="1" value="10">
+                    <small>A menor impedancia, más corriente se desvía del LED.</small>
+                </div>
+            </aside>
+
+            <!-- Panel de Visualización del Circuito -->
+            <section class="visualization">
+                <div class="circuit-container">
+                    <div class="circuit">
+                        <div class="node dimmer">
+                            <span>Dimmer (OFF)</span>
+                            <small id="display-itotal">2.00 mA</small>
+                        </div>
+                        
+                        <div class="branches">
+                            <div class="branch">
+                                <div class="component snubber" id="snubber-comp">
+                                    <span>Snubber RC</span>
+                                    <small id="display-isnub">0.00 mA</small>
+                                </div>
+                            </div>
+                            <div class="branch">
+                                <div class="component led" id="led-comp">
+                                    <div class="bulb" id="led-bulb"></div>
+                                    <span>Cinta LED</span>
+                                    <small id="display-iled">0.00 mA</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="status-panel" id="status-panel">
+                    <h3>Estado Final: <span id="system-status">CALCULANDO...</span></h3>
+                    <p id="system-desc">Calculando impedancias...</p>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
