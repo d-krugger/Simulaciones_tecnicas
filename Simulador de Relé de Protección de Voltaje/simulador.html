@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Relé de Protección - Shelly</title>
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --text-main: #333333;
+            --text-muted: #666666;
+            --primary: #0f2c59;
+            --accent: #3b82f6;
+            --danger: #ef4444;
+            --success: #10b981;
+            --border: #e2e8f0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .dashboard {
+            background: var(--card-bg);
+            width: 100%;
+            max-width: 550px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            padding: 30px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .header h2 {
+            color: var(--primary);
+            margin-bottom: 5px;
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        .control-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .value-badge {
+            background: var(--bg-color);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+            color: var(--primary);
+            border: 1px solid var(--border);
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            background: var(--border);
+            border-radius: 3px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--accent);
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        select {
+            width: 100%;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background-color: var(--bg-color);
+            font-size: 16px;
+            color: var(--text-main);
+            outline: none;
+        }
+
+        /* Contenedor del medidor tipo reloj */
+        .gauge-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 25px;
+            position: relative;
+        }
+
+        canvas {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .gauge-labels {
+            display: flex;
+            justify-content: space-between;
+            width: 80%;
+            margin-top: -10px;
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: bold;
+        }
+
+        /* Estado Final */
+        .status-panel {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        .status-ok { background: #d1fae5; color: #065f46; border: 1px solid #10b981; }
+        .status-error { background: #fee2e2; color: #991b1b; border: 1px solid #ef4444; }
+
+    </style>
+</head>
+<body>
+
+<div class="dashboard">
+    <div class="header">
+        <h2>Simulador de Relé de Protección</h2>
+        <p style="color: var(--text-muted); font-size: 14px;">Análisis de Umbrales de Voltaje</p>
+    </div>
+
+    <div class="control-group">
+        <div class="control-header">
+            <label>Red Eléctrica Nominal</label>
+        </div>
+        <select id="gridNominal">
+            <option value="120">120V AC - 60Hz (Colombia)</option>
+            <option value="230">230V AC - 50Hz (Europa)</option>
+        </select>
+    </div>
+
+    <div class="control-group">
+        <div class="control-header">
+            <label>Protección contra Subtensión</label>
+            <span class="value-badge" id="lblMin">100 V</span>
+        </div>
+        <input type="range" id="minThresh" min="50" max="250" value="100">
+    </div>
+
+    <div class="control-group">
+        <div class="control-header">
+            <label>Protección de Tensión Máxima</label>
+            <span class="value-badge" id="lblMax">140 V</span>
+        </div>
+        <input type="range" id="maxThresh" min="100" max="300" value="140">
+    </div>
+
+    <div class="control-group" style="margin-top: 25px; padding-top: 15px; border-top: 1px dashed #ccc;">
+        <div class="control-header">
+            <label style="color: var(--accent); font-weight: bold;">Voltaje en Tiempo Real</label>
+            <span class="value-badge" id="lblCurr" style="background: var(--accent); color: white;">122 V</span>
+        </div>
+        <input type="range" id="currVolt" min="50" max="300" value="122">
+    </div>
+
+    <div class="gauge-container">
+        <canvas id="gaugeCanvas" width="400" height="200"></canvas>
+        <div class="gauge-labels">
+            <span>50V</span>
+            <span>300V</span>
+        </div>
+    </div>
+
+    <div class="status-panel status-ok" id="statusPanel">
+        ESTADO: Operativo (Normal)
+    </div>
+</div>
+
+<script>
+    // Referencias al DOM
+    const gridNominal = document.getElementById('gridNominal');
+    const minThresh = document.getElementById('minThresh');
+    const maxThresh = document.getElementById('maxThresh');
+    const currVolt = document.getElementById('currVolt');
+    
+    const lblMin = document.getElementById('lblMin');
+    const lblMax = document.getElementById('lblMax');
+    const lblCurr = document.getElementById('lblCurr');
+    const statusPanel = document.getElementById('statusPanel');
+
+    const canvas = document.getElementById('gaugeCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Escala del visualizador (50V a 300V)
+    const MIN_SCALE = 50;
+    const MAX_SCALE = 300;
+    const SPAN = MAX_SCALE - MIN_SCALE;
+
+    // Función para dibujar el Reloj (Gauge)
+    function drawGauge(minV, maxV, currV) {
+        // Limpiar el canvas en cada actualización
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        const cx = canvas.width / 2;
+        const cy = canvas.height - 20; // Dejar margen abajo
+        const radius = 150;
+        const thickness = 25;
+
+        // Función auxiliar para mapear voltajes a radianes (de Pi a 2*Pi)
+        // Pi = 180° (Izquierda), 2*Pi = 360° (Derecha)
+        const valToAngle = (v) => {
+            const pct = Math.max(0, Math.min(1, (v - MIN_SCALE) / SPAN));
+            return Math.PI + (pct * Math.PI);
+        };
+
+        const angleMin = valToAngle(minV);
+        const angleMax = valToAngle(maxV);
+        const angleCurr = valToAngle(currV);
+
+        ctx.lineWidth = thickness;
+        ctx.lineCap = "butt";
+
+        // 1. Zona de Falla por Subtensión (Rojo)
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, Math.PI, angleMin);
+        ctx.strokeStyle = '#ef4444'; 
+        ctx.stroke();
+
+        // 2. Zona Operativa Segura (Verde)
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, angleMin, angleMax);
+        ctx.strokeStyle = '#10b981';
+        ctx.stroke();
+
+        // 3. Zona de Falla por Sobretensión (Rojo)
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, angleMax, 2 * Math.PI);
+        ctx.strokeStyle = '#ef4444';
+        ctx.stroke();
+
+        // 4. Dibujar Aguja (Needle)
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(angleCurr);
+        
+        ctx.beginPath();
+        ctx.moveTo(0, -6);
+        ctx.lineTo(radius - 15, 0); // Punta de la aguja
+        ctx.lineTo(0, 6);
+        ctx.fillStyle = '#111827';
+        ctx.fill();
+        ctx.restore();
+
+        // 5. Dibujar Base / Eje de la aguja
+        ctx.beginPath();
+        ctx.arc(cx, cy, 12, 0, 2 * Math.PI);
+        ctx.fillStyle = '#111827';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx, cy, 5, 0, 2 * Math.PI);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+    }
+
+    // Lógica principal de actualización
+    function updateSimulation() {
+        let minV = parseInt(minThresh.value);
+        let maxV = parseInt(maxThresh.value);
+        let currentV = parseInt(currVolt.value);
+
+        // Validar que el mínimo no cruce el máximo
+        if (minV >= maxV) {
+            minV = maxV - 1;
+            minThresh.value = minV;
+        }
+
+        // Actualizar textos
+        lblMin.textContent = minV + " V";
+        lblMax.textContent = maxV + " V";
+        lblCurr.textContent = currentV + " V";
+
+        // Redibujar el canvas
+        drawGauge(minV, maxV, currentV);
+
+        // Evaluar estado lógico para el panel de texto
+        if (currentV < minV) {
+            statusPanel.className = "status-panel status-error";
+            statusPanel.textContent = "BLOQUEO: Falla por Subtensión";
+        } else if (currentV > maxV) {
+            statusPanel.className = "status-panel status-error";
+            statusPanel.textContent = "BLOQUEO: Falla por Sobretensión";
+        } else {
+            statusPanel.className = "status-panel status-ok";
+            statusPanel.textContent = "ESTADO: Operativo (Normal)";
+        }
+    }
+
+    // Preconfiguraciones al cambiar de red
+    gridNominal.addEventListener('change', (e) => {
+        if (e.target.value === "230") {
+            minThresh.value = 180;
+            maxThresh.value = 250;
+            currVolt.value = 230;
+        } else {
+            minThresh.value = 100;
+            maxThresh.value = 140;
+            currVolt.value = 122;
+        }
+        updateSimulation();
+    });
+
+    // Event Listeners
+    minThresh.addEventListener('input', updateSimulation);
+    maxThresh.addEventListener('input', updateSimulation);
+    currVolt.addEventListener('input', updateSimulation);
+
+    // Render inicial
+    updateSimulation();
+</script>
+
+</body>
+</html>
