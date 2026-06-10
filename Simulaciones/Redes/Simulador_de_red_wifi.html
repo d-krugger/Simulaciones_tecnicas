@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Red LAN/WiFi UniFi</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; display: flex; height: 100vh; background-color: #f4f5f7; overflow: hidden; }
+        #sidebar { width: 320px; background: #ffffff; border-right: 1px solid #ddd; padding: 20px; box-shadow: 2px 0 5px rgba(0,0,0,0.05); z-index: 10; display: flex; flex-direction: column; }
+        #sidebar h2 { margin-top: 0; color: #005eb8; font-size: 1.2rem; }
+        .device-option { background: #f8f9fa; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; border-radius: 6px; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 10px; }
+        .device-option:hover { background: #eef2f5; border-color: #005eb8; }
+        .device-icon { width: 40px; height: 40px; background: #ddd; border-radius: 4px; object-fit: contain; }
+        #workspace { flex-grow: 1; position: relative; background: radial-gradient(circle, #f0f0f0 10%, transparent 10%); background-size: 20px 20px; }
+        
+        /* Nodos en el área de trabajo */
+        .node { position: absolute; width: 80px; text-align: center; cursor: grab; user-select: none; z-index: 5; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 2px solid transparent; transition: border-color 0.3s, box-shadow 0.3s; }
+        .node:active { cursor: grabbing; }
+        .node.selected { border-color: #005eb8; box-shadow: 0 0 15px rgba(0, 94, 184, 0.6); }
+        .node.error { border-color: #ff4d4d; box-shadow: 0 0 15px rgba(255, 77, 77, 0.6); animation: shake 0.5s ease-in-out; }
+        .node img { width: 60px; height: 60px; object-fit: contain; margin-bottom: 5px; }
+        .node .label { font-size: 0.75rem; font-weight: bold; color: #333; word-wrap: break-word; }
+        .node .ports { font-size: 0.65rem; color: #666; margin-top: 4px; }
+        
+        /* Animación de error (shake) */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-5px); }
+            40% { transform: translateX(5px); }
+            60% { transform: translateX(-3px); }
+            80% { transform: translateX(3px); }
+        }
+        
+        /* Capa para los cables */
+        #cables-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        .cable { cursor: pointer; transition: stroke 0.3s; }
+        .cable:hover { stroke: #005eb8; stroke-width: 5; }
+        .cable.selected { stroke: #005eb8; stroke-width: 5; }
+        .cable.error { stroke: #ff4d4d; stroke-width: 5; animation: cablePulse 1s ease-in-out infinite; }
+        
+        @keyframes cablePulse {
+            0%, 100% { stroke-opacity: 1; }
+            50% { stroke-opacity: 0.5; }
+        }
+        
+        /* Panel de mensajes */
+        #console { margin-top: auto; background: #333; color: #00ffcc; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 0.8rem; height: 120px; overflow-y: auto; }
+        .error { color: #ff4d4d; }
+        .success { color: #00ffcc; }
+        .warning { color: #ffaa00; }
+        
+        #instructions { font-size: 0.85rem; color: #555; margin-bottom: 15px; background: #eef2f5; padding: 10px; border-radius: 6px; }
+        
+        /* Botones de acción */
+        .action-buttons { display: flex; gap: 8px; margin-bottom: 15px; }
+        .action-btn { flex: 1; padding: 8px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8rem; transition: 0.2s; }
+        .action-btn.delete { background: #ff4d4d; color: white; }
+        .action-btn.delete:hover { background: #cc0000; }
+        .action-btn.delete:disabled { background: #ccc; cursor: not-allowed; }
+        .action-btn.clear { background: #666; color: white; }
+        .action-btn.clear:hover { background: #444; }
+        
+        /* Indicador de conexión */
+        .connection-indicator { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 2rem; pointer-events: none; opacity: 0; transition: opacity 0.3s; }
+        .connection-indicator.show { opacity: 1; }
+        
+        /* Resumen de conexiones */
+        #connection-list { max-height: 150px; overflow-y: auto; margin-bottom: 10px; }
+        .connection-item { display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; background: #f0f0f0; margin-bottom: 5px; border-radius: 4px; font-size: 0.75rem; }
+        .connection-item button { background: #ff4d4d; color: white; border: none; border-radius: 3px; cursor: pointer; padding: 2px 6px; font-size: 0.7rem; }
+        .connection-item button:hover { background: #cc0000; }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <h2>Catálogo de Equipos UniFi</h2>
+        <div id="instructions">
+            <strong>Instrucciones:</strong><br>
+            • Click equipo → Añadir al área<br>
+            • Click nodo + Click otro nodo → Conectar<br>
+            • Click cable → Seleccionar<br>
+            • <kbd>Delete</kbd> → Borrar selección<br>
+            • <kbd>Shift</kbd>+Click → Arrastrar sin conectar
+        </div>
+        
+        <div class="action-buttons">
+            <button class="action-btn delete" id="btn-delete" onclick="deleteSelected()" disabled>Borrar</button>
+            <button class="action-btn clear" onclick="clearAll()">Limpiar Todo</button>
+        </div>
+        
+        <div id="catalog"></div>
+        
+        <h3 style="font-size: 0.9rem; margin: 15px 0 10px 0; color: #333;">Conexiones Activas</h3>
+        <div id="connection-list"></div>
+        
+        <div id="console">
+            <div>[Sistema] Simulación iniciada.</div>
+        </div>
+    </div>
+
+    <div id="workspace">
+        <svg id="cables-layer"></svg>
+    </div>
+
+<script>
+    // Catálogo de dispositivos simulando la oferta de UI.com
+    const catalog = [
+        { id: 'isp', type: 'isp', name: 'Proveedor de Internet (ISP)', icon: 'https://cdn-icons-png.flaticon.com/512/3055/3055276.png' },
+        { id: 'udm', type: 'router', name: 'UniFi Dream Machine Pro', icon: 'https://cdn-icons-png.flaticon.com/512/2885/2885417.png', ports: 'WAN / LAN' },
+        { id: 'sw_poe', type: 'switch', name: 'Switch Pro 24 PoE', icon: 'https://cdn-icons-png.flaticon.com/512/2312/2312480.png', poe: true, ports: '24 Puertos (PoE+)' },
+        { id: 'sw_mini', type: 'switch', name: 'Switch Flex Mini', icon: 'https://cdn-icons-png.flaticon.com/512/2312/2312480.png', poe: false, ports: '5 Puertos (Sin PoE)' },
+        { id: 'ap_u7', type: 'ap', name: 'U7 Pro', icon: 'https://cdn-icons-png.flaticon.com/512/2885/2885412.png', reqPoe: true },
+        { id: 'ap_u6', type: 'ap', name: 'U6 Lite', icon: 'https://cdn-icons-png.flaticon.com/512/2885/2885412.png', reqPoe: true },
+        { id: 'poe_inj', type: 'injector', name: 'Inyector PoE+', icon: 'https://cdn-icons-png.flaticon.com/512/8654/8654060.png' },
+        { id: 'client_pc', type: 'client', name: 'PC/Portátil', icon: 'https://cdn-icons-png.flaticon.com/512/3081/3081840.png' },
+        { id: 'client_phone', type: 'client', name: 'Smartphone', icon: 'https://cdn-icons-png.flaticon.com/512/644/644458.png' }
+    ];
+
+    let nodes = [];
+    let connections = [];
+    let selectedNodeId = null;
+    let selectedConnectionIndex = null;
+    let nodeCounter = 0;
+
+    const workspace = document.getElementById('workspace');
+    const svgLayer = document.getElementById('cables-layer');
+    const consoleDiv = document.getElementById('console');
+
+    function logMessage(msg, type = 'success') {
+        const div = document.createElement('div');
+        div.className = type;
+        div.textContent = `> ${msg}`;
+        consoleDiv.appendChild(div);
+        consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        
+        // Auto-limpiar mensajes antiguos si hay más de 50
+        while (consoleDiv.children.length > 50) {
+            consoleDiv.removeChild(consoleDiv.firstChild);
+        }
+    }
+    
+    function updateDeleteButton() {
+        const btn = document.getElementById('btn-delete');
+        btn.disabled = !selectedNodeId && selectedConnectionIndex === null;
+    }
+
+    // Inicializar catálogo
+    const catalogDiv = document.getElementById('catalog');
+    catalog.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'device-option';
+        div.innerHTML = `<img src="${item.icon}" class="device-icon" alt="${item.name}"> <span>${item.name}</span>`;
+        div.onclick = () => addNode(item);
+        catalogDiv.appendChild(div);
+    });
+
+    function addNode(template) {
+        const nodeId = 'node_' + nodeCounter++;
+        const nodeData = { ...template, uid: nodeId, x: 300 + Math.random() * 100, y: 100 + Math.random() * 100 };
+        nodes.push(nodeData);
+
+        const el = document.createElement('div');
+        el.className = 'node';
+        el.id = nodeId;
+        el.style.left = nodeData.x + 'px';
+        el.style.top = nodeData.y + 'px';
+        el.innerHTML = `
+            <img src="${nodeData.icon}" draggable="false">
+            <div class="label">${nodeData.name}</div>
+            ${nodeData.ports ? `<div class="ports">${nodeData.ports}</div>` : ''}
+        `;
+
+        // Lógica de Drag & Drop
+        let isDragging = false;
+        let startX, startY;
+        let dragStartTime = 0;
+
+        el.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return; // Solo click izquierdo
+            isDragging = true;
+            dragStartTime = Date.now();
+            startX = e.clientX - nodeData.x;
+            startY = e.clientY - nodeData.y;
+            el.style.zIndex = 10;
+            e.stopPropagation();
+        });
+
+        const onMouseMove = (e) => {
+            if (!isDragging) return;
+            nodeData.x = e.clientX - startX;
+            nodeData.y = e.clientY - startY;
+            el.style.left = nodeData.x + 'px';
+            el.style.top = nodeData.y + 'px';
+            drawConnections();
+        };
+
+        const onMouseUp = (e) => {
+            if (!isDragging) return;
+            isDragging = false;
+            el.style.zIndex = 5;
+            
+            // Si fue un click rápido (menos de 200ms) y sin movimiento significativo, tratar como click
+            const dragTime = Date.now() - dragStartTime;
+            if (dragTime < 200 && !e.shiftKey) {
+                handleNodeClick(nodeData.uid);
+            }
+            
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        };
+
+        el.addEventListener('mousedown', () => {
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+
+        // Click derecho para seleccionar/borrar
+        el.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            selectNode(nodeData.uid);
+        });
+
+        workspace.appendChild(el);
+        logMessage(`Añadido: ${nodeData.name}`);
+    }
+
+    function selectNode(uid) {
+        // Deseleccionar todo primero
+        deselectAll();
+        
+        selectedNodeId = uid;
+        const el = document.getElementById(uid);
+        el.classList.add('selected');
+        logMessage(`Seleccionado: ${nodes.find(n => n.uid === uid).name}`);
+        updateDeleteButton();
+    }
+
+    function deselectAll() {
+        if (selectedNodeId) {
+            const el = document.getElementById(selectedNodeId);
+            if (el) el.classList.remove('selected');
+            selectedNodeId = null;
+        }
+        selectedConnectionIndex = null;
+        document.querySelectorAll('.cable').forEach(c => c.classList.remove('selected'));
+        updateDeleteButton();
+    }
+
+    function handleNodeClick(uid) {
+        if (selectedNodeId === uid) {
+            // Deseleccionar si ya estaba seleccionado
+            deselectAll();
+            return;
+        }
+        
+        if (!selectedNodeId) {
+            selectedNodeId = uid;
+            document.getElementById(uid).classList.add('selected');
+            logMessage('Seleccionado para conectar... Click en otro equipo para conectar.');
+            updateDeleteButton();
+        } else {
+            // Crear conexión
+            attemptConnection(selectedNodeId, uid);
+            document.getElementById(selectedNodeId).classList.remove('selected');
+            selectedNodeId = null;
+            updateDeleteButton();
+        }
+    }
+
+    function showErrorOnNodes(id1, id2) {
+        const el1 = document.getElementById(id1);
+        const el2 = document.getElementById(id2);
+        el1.classList.add('error');
+        el2.classList.add('error');
+        setTimeout(() => {
+            el1.classList.remove('error');
+            el2.classList.remove('error');
+        }, 1500);
+    }
+
+    function attemptConnection(id1, id2) {
+        const node1 = nodes.find(n => n.uid === id1);
+        const node2 = nodes.find(n => n.uid === id2);
+
+        // Validaciones didácticas de topología
+        const types = [node1.type, node2.type];
+        
+        // 1. ISP solo a Router
+        if (types.includes('isp')) {
+            if (!types.includes('router')) {
+                logMessage("❌ ERROR: El ISP debe conectarse al puerto WAN del Router (Dream Machine).", "error");
+                showErrorOnNodes(id1, id2);
+                return;
+            }
+        }
+
+        // 2. AP a Switch sin PoE
+        if (types.includes('ap') && types.includes('switch')) {
+            const ap = node1.type === 'ap' ? node1 : node2;
+            const sw = node1.type === 'switch' ? node1 : node2;
+            
+            if (ap.reqPoe && !sw.poe) {
+                logMessage(`❌ ERROR: El ${ap.name} requiere energía PoE. El ${sw.name} no tiene PoE. Añade un Inyector PoE entre ellos.`, "error");
+                showErrorOnNodes(id1, id2);
+                return;
+            }
+        }
+
+        // 3. Cliente directo a ISP (no válido)
+        if (types.includes('client') && types.includes('isp')) {
+            logMessage("❌ ERROR: Los dispositivos cliente no pueden conectarse directamente al ISP. Necesitan un router.", "error");
+            showErrorOnNodes(id1, id2);
+            return;
+        }
+
+        // 4. Verificar si ya existe la conexión
+        const exists = connections.some(c => 
+            (c.from === id1 && c.to === id2) || (c.from === id2 && c.to === id1)
+        );
+        if (exists) {
+            logMessage("⚠️ Ya existe una conexión entre estos equipos.", "warning");
+            return;
+        }
+
+        // 5. Verificar AP a Inyector
+        if (types.includes('ap') && types.includes('injector')) {
+            const ap = node1.type === 'ap' ? node1 : node2;
+            if (!ap.reqPoe) {
+                logMessage(`⚠️ AVISO: El ${ap.name} no necesita PoE, pero se conectará igualmente.`, "warning");
+            } else {
+                logMessage(`✅ Conexión PoE correcta: ${ap.name} recibirá energía del inyector.`, "success");
+            }
+        }
+
+        // 6. AP a AP (Red Malla - Mesh)
+        if (node1.type === 'ap' && node2.type === 'ap') {
+            logMessage("⚠️ Red Mesh: Conexión AP a AP. El rendimiento puede reducirse por saltos.", "warning");
+        }
+
+        // 7. Cliente conectado a Switch (correcto)
+        if (types.includes('client') && types.includes('switch')) {
+            logMessage(`✅ Cliente conectado a switch correctamente.`, "success");
+        }
+
+        // 8. Cliente conectado a AP (WiFi)
+        if (types.includes('client') && types.includes('ap')) {
+            logMessage(`✅ Cliente conectado vía WiFi al AP.`, "success");
+        }
+
+        // 9. Switch a Switch (daisy chain)
+        if (node1.type === 'switch' && node2.type === 'switch') {
+            logMessage(`ℹ️ Daisy chain: Switches conectados. Verifica la topología no crea bucles.`, "warning");
+        }
+
+        // Crear conexión si pasa las validaciones
+        const connIndex = connections.length;
+        connections.push({ from: id1, to: id2 });
+        logMessage(`✅ Conexión creada: ${node1.name} ↔ ${node2.name}`, "success");
+        drawConnections();
+        updateConnectionList();
+    }
+
+    function updateConnectionList() {
+        const listDiv = document.getElementById('connection-list');
+        listDiv.innerHTML = '';
+        
+        if (connections.length === 0) {
+            listDiv.innerHTML = '<div style="font-size: 0.75rem; color: #888; text-align: center; padding: 10px;">Sin conexiones</div>';
+            return;
+        }
+        
+        connections.forEach((conn, index) => {
+            const node1 = nodes.find(n => n.uid === conn.from);
+            const node2 = nodes.find(n => n.uid === conn.to);
+            if (!node1 || !node2) return;
+            
+            const item = document.createElement('div');
+            item.className = 'connection-item';
+            item.innerHTML = `
+                <span>${node1.name} ↔ ${node2.name}</span>
+                <button onclick="deleteConnection(${index})">×</button>
+            `;
+            listDiv.appendChild(item);
+        });
+    }
+
+    function drawConnections() {
+        svgLayer.innerHTML = '';
+        connections.forEach((conn, index) => {
+            const el1 = document.getElementById(conn.from);
+            const el2 = document.getElementById(conn.to);
+            
+            if (!el1 || !el2) return;
+            
+            const rect1 = el1.getBoundingClientRect();
+            const rect2 = el2.getBoundingClientRect();
+            const workspaceRect = workspace.getBoundingClientRect();
+
+            // Calcular centros
+            const x1 = rect1.left - workspaceRect.left + rect1.width / 2;
+            const y1 = rect1.top - workspaceRect.top + rect1.height / 2;
+            const x2 = rect2.left - workspaceRect.left + rect2.width / 2;
+            const y2 = rect2.top - workspaceRect.top + rect2.height / 2;
+
+            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            line.setAttribute("x1", x1);
+            line.setAttribute("y1", y1);
+            line.setAttribute("x2", x2);
+            line.setAttribute("y2", y2);
+            line.setAttribute("stroke", selectedConnectionIndex === index ? "#005eb8" : "#333");
+            line.setAttribute("stroke-width", selectedConnectionIndex === index ? "5" : "3");
+            line.setAttribute("stroke-dasharray", "5,5");
+            line.setAttribute("class", `cable ${selectedConnectionIndex === index ? 'selected' : ''}`);
+            line.style.pointerEvents = "stroke";
+            
+            // Click para seleccionar cable
+            line.addEventListener('click', (e) => {
+                e.stopPropagation();
+                selectConnection(index);
+            });
+            
+            svgLayer.appendChild(line);
+        });
+    }
+
+    function selectConnection(index) {
+        deselectAll();
+        selectedConnectionIndex = index;
+        const node1 = nodes.find(n => n.uid === connections[index].from);
+        const node2 = nodes.find(n => n.uid === connections[index].to);
+        logMessage(`Cable seleccionado: ${node1?.name} ↔ ${node2?.name}`);
+        drawConnections();
+        updateDeleteButton();
+    }
+
+    function deleteConnection(index) {
+        if (index < 0 || index >= connections.length) return;
+        const conn = connections[index];
+        const node1 = nodes.find(n => n.uid === conn.from);
+        const node2 = nodes.find(n => n.uid === conn.to);
+        
+        connections.splice(index, 1);
+        logMessage(`Conexión eliminada: ${node1?.name} ↔ ${node2?.name}`);
+        
+        if (selectedConnectionIndex === index) {
+            selectedConnectionIndex = null;
+        }
+        
+        drawConnections();
+        updateConnectionList();
+        updateDeleteButton();
+    }
+
+    function deleteSelected() {
+        if (selectedConnectionIndex !== null) {
+            deleteConnection(selectedConnectionIndex);
+        } else if (selectedNodeId) {
+            deleteNode(selectedNodeId);
+        }
+    }
+
+    function deleteNode(uid) {
+        const node = nodes.find(n => n.uid === uid);
+        if (!node) return;
+        
+        // Eliminar conexiones asociadas
+        const initialCount = connections.length;
+        connections = connections.filter(c => c.from !== uid && c.to !== uid);
+        const removed = initialCount - connections.length;
+        
+        // Eliminar el nodo
+        const el = document.getElementById(uid);
+        if (el) el.remove();
+        nodes = nodes.filter(n => n.uid !== uid);
+        
+        logMessage(`Eliminado: ${node.name}${removed > 0 ? ` (+${removed} conexiones)` : ''}`);
+        
+        selectedNodeId = null;
+        updateConnectionList();
+        drawConnections();
+        updateDeleteButton();
+    }
+
+    function clearAll() {
+        if (nodes.length === 0 && connections.length === 0) return;
+        
+        if (confirm(`¿Borrar todo? Se eliminarán ${nodes.length} equipos y ${connections.length} conexiones.`)) {
+            nodes.forEach(n => {
+                const el = document.getElementById(n.uid);
+                if (el) el.remove();
+            });
+            nodes = [];
+            connections = [];
+            selectedNodeId = null;
+            selectedConnectionIndex = null;
+            
+            svgLayer.innerHTML = '';
+            logMessage('Todo el escenario ha sido limpiado.');
+            updateConnectionList();
+            updateDeleteButton();
+        }
+    }
+
+    // Tecla Delete para borrar selección
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+            // No borrar si estamos en un input
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            deleteSelected();
+        }
+        // Escape para deseleccionar
+        if (e.key === 'Escape') {
+            deselectAll();
+        }
+    });
+
+    // Click en workspace para deseleccionar todo
+    workspace.addEventListener('click', (e) => {
+        if (e.target === workspace || e.target === svgLayer) {
+            deselectAll();
+        }
+    });
+
+    // Inicializar lista de conexiones
+    updateConnectionList();
+</script>
+</body>
+</html>

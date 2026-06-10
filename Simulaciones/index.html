@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Simulaciones Técnicas</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --primary: #38bdf8;
+            --accent-snubber: #fbbf24;
+            --accent-shelly: #10b981;
+            --border: #334155;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            text-align: center;
+        }
+
+        .header {
+            margin-bottom: 50px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            color: var(--text-main);
+            margin-bottom: 10px;
+            font-weight: 800;
+            letter-spacing: -0.05em;
+        }
+
+        .header h1 span {
+            color: var(--primary);
+        }
+
+        .header p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 30px;
+            text-align: left;
+            text-decoration: none;
+            color: inherit;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+        }
+
+        .card.snubber::before { background: var(--accent-snubber); }
+        .card.shelly::before { background: var(--accent-shelly); }
+
+        .card:hover {
+            transform: translateY(-5px);
+            border-color: var(--primary);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+        }
+
+        .icon {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+        }
+
+        .card-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: var(--text-main);
+        }
+
+        .card-desc {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            line-height: 1.5;
+            margin-bottom: 25px;
+        }
+
+        .btn-action {
+            display: inline-flex;
+            align-items: center;
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: var(--primary);
+            transition: color 0.2s;
+        }
+
+        .card:hover .btn-action {
+            color: var(--text-main);
+        }
+
+        .footer {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>Laboratorio de <span>Simulaciones</span></h1>
+        <p>Módulos interactivos para desarrollo y análisis de ingeniería</p>
+    </div>
+
+    <div class="grid">
+        <a href="./simulaciones/snubber.html" class="card snubber">
+            <div>
+                <div class="icon">🎛️</div>
+                <div class="card-title">Circuito Snubber RC</div>
+                <div class="card-desc">Cálculo y análisis de supresión de picos de voltaje transitorios y protección de contactos en cargas inductivas.</div>
+            </div>
+            <div class="btn-action">Abrir Simulador →</div>
+        </a>
+
+        <a href="./simulaciones/simulador.html" class="card shelly">
+            <div>
+                <div class="icon">⚡</div>
+                <div class="card-title">Relé de Protección Shelly</div>
+                <div class="card-desc">Simulación interactiva de umbrales de sobretensión y subtensión adaptados para la red eléctrica de Colombia (120V).</div>
+            </div>
+            <div class="btn-action">Abrir Simulador →</div>
+        </a>
+    </div>
+
+    <div class="footer">
+        <p>Desplegado en Vercel de forma automatizada</p>
+    </div>
+</div>
+
+</body>
+</html>
